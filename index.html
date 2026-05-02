@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nifty 200 Signal Terminal</title>
+  <style>
+    /* ─── RESET & BASE ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0d1117;
+      --bg2:      #161b22;
+      --bg3:      #21262d;
+      --border:   #30363d;
+      --text:     #c9d1d9;
+      --muted:    #8b949e;
+      --buy:      #3fb950;
+      --sell:     #f85149;
+      --hold:     #d29922;
+      --accent:   #58a6ff;
+      --font:     'Courier New', 'Lucida Console', monospace;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      min-height: 100vh;
+    }
+    a { color: var(--accent); text-decoration: none; }
+
+    /* ─── LOGIN OVERLAY ─────────────────────────────────────────────── */
+    #login-overlay {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 999;
+    }
+    .login-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 40px 36px;
+      width: 360px;
+    }
+    .login-box h1 {
+      font-size: 22px;
+      color: var(--accent);
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+    }
+    .login-box p { color: var(--muted); margin-bottom: 28px; font-size: 12px; }
+    .field-group { margin-bottom: 16px; }
+    .field-group label { display: block; color: var(--muted); margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+    .field-group input {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .field-group input:focus { border-color: var(--accent); }
+    #login-btn {
+      width: 100%;
+      padding: 11px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 8px;
+      letter-spacing: 1px;
+      transition: opacity .2s;
+    }
+    #login-btn:hover { opacity: .85; }
+    #login-btn:disabled { opacity: .5; cursor: not-allowed; }
+    #login-error { color: var(--sell); font-size: 12px; margin-top: 10px; display: none; }
+
+    /* ─── MAIN APP ──────────────────────────────────────────────────── */
+    #app { display: none; flex-direction: column; min-height: 100vh; }
+
+    /* HEADER */
+    #header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    #header .brand { color: var(--accent); font-size: 15px; font-weight: bold; letter-spacing: 2px; }
+    #header .meta  { color: var(--muted); font-size: 11px; display: flex; gap: 16px; align-items: center; }
+    #market-badge {
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+    .market-open   { background: #1a3a1e; color: var(--buy); border: 1px solid var(--buy); }
+    .market-closed { background: #3a1a1a; color: var(--sell); border: 1px solid var(--sell); }
+    #last-update   { color: var(--muted); font-size: 10px; }
+    #logout-btn    { background: none; border: 1px solid var(--border); color: var(--muted); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-family: var(--font); font-size: 11px; }
+    #logout-btn:hover { border-color: var(--sell); color: var(--sell); }
+
+    /* NAV TABS */
+    #nav {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      display: flex;
+      gap: 0;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      padding: 10px 18px;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 12px;
+      letter-spacing: 1px;
+      transition: color .2s, border-color .2s;
+      text-transform: uppercase;
+    }
+    .tab-btn:hover      { color: var(--text); }
+    .tab-btn.active     { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* FILTER BAR */
+    #filter-bar {
+      padding: 10px 20px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .filter-bar-hidden { display: none !important; }
+    #search-input, #sector-filter, #signal-filter {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 5px;
+      font-family: var(--font);
+      font-size: 12px;
+      outline: none;
+    }
+    #search-input { width: 220px; }
+    #search-input:focus, #sector-filter:focus, #signal-filter:focus { border-color: var(--accent); }
+    select option { background: var(--bg2); }
+    #filter-bar .count { color: var(--muted); font-size: 11px; margin-left: auto; }
+    #refresh-btn {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 11px;
+    }
+    #refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+    #countdown { color: var(--muted); font-size: 11px; }
+
+    /* CONTENT */
+    #content { padding: 16px 20px; flex: 1; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* TABLES */
+    .tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      background: var(--bg3);
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+    th:hover { color: var(--accent); }
+    th.sorted-asc::after  { content: " ▲"; }
+    th.sorted-desc::after { content: " ▼"; }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(88,166,255,.05); }
+
+    /* SIGNAL BADGES */
+    .sig { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 10px; font-weight: bold; letter-spacing: 1px; }
+    .sig-BUY  { background: #1a3a1e; color: var(--buy);  border: 1px solid var(--buy); }
+    .sig-SELL { background: #3a1a1a; color: var(--sell); border: 1px solid var(--sell); }
+    .sig-HOLD { background: #2d2a1a; color: var(--hold); border: 1px solid var(--hold); }
+
+    /* PRICE COLORS */
+    .pos { color: var(--buy); }
+    .neg { color: var(--sell); }
+    .neu { color: var(--muted); }
+
+    /* SYMBOL LINK */
+    .sym-link { color: var(--accent); cursor: pointer; font-weight: bold; }
+    .sym-link:hover { text-decoration: underline; }
+
+    /* LOADING / ERROR */
+    .loading { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin-bottom: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg { color: var(--sell); text-align: center; padding: 40px; }
+
+    /* INDEX CARDS */
+    #indices-grid { display: flex; flex-wrap: wrap; gap: 14px; }
+    .idx-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 22px;
+      min-width: 180px;
+      flex: 1 1 180px;
+    }
+    .idx-card .idx-name  { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .idx-card .idx-price { font-size: 22px; font-weight: bold; margin-bottom: 4px; }
+    .idx-card .idx-chg   { font-size: 12px; }
+
+    /* STOCK DETAIL */
+    #detail-panel .detail-header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 14px 0; margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail-header .d-sym  { font-size: 24px; font-weight: bold; color: var(--accent); }
+    .detail-header .d-name { color: var(--muted); font-size: 13px; }
+    .detail-header .d-price{ font-size: 20px; font-weight: bold; }
+    #back-btn {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 12px;
+    }
+    #back-btn:hover { border-color: var(--accent); }
+
+    /* STAT BOXES */
+    .stat-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .stat-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 16px;
+      min-width: 130px;
+    }
+    .stat-box .s-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+    .stat-box .s-value { font-size: 15px; font-weight: bold; }
+
+    /* HISTORY TABLE note */
+    .section-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    /* RESPONSIVE */
+    @media (max-width: 600px) {
+      #header { flex-wrap: wrap; gap: 8px; }
+      #filter-bar { flex-direction: column; align-items: flex-start; }
+      #search-input { width: 100%; }
+      .login-box { width: 95vw; padding: 28px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ──────────────── LOGIN ──────────────────────────────────────────── -->
+<div id="login-overlay">
+  <div class="login-box">
+    <h1>◈ NIFTY SIGNALS</h1>
+    <p>Nifty 200 Live Signal Terminal — Authorized Access Only</p>
+    <div class="field-group">
+      <label>Email</label>
+      <input type="email" id="email-input" placeholder="trader@nifty.com" autocomplete="username" />
+    </div>
+    <div class="field-group">
+      <label>Password</label>
+      <input type="password" id="password-input" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button id="login-btn" onclick="doLogin()">LOGIN →</button>
+    <div id="login-error">❌ Invalid email or password.</div>
+  </div>
+</div>
+
+<!-- ──────────────── MAIN APP ───────────────────────────────────────── -->
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div class="brand">◈ NIFTY 200 SIGNALS</div>
+    <div class="meta">
+      <span id="market-badge" class="market-closed">MARKET CLOSED</span>
+      <span id="last-update">—</span>
+      <span id="countdown">Refresh in <b id="cd-sec">60</b>s</span>
+      <button id="logout-btn" onclick="logout()">LOGOUT</button>
+    </div>
+  </div>
+
+  <!-- NAV TABS -->
+  <div id="nav">
+    <button class="tab-btn active" data-tab="signals"  onclick="switchTab('signals')">📊 Live Signals</button>
+    <button class="tab-btn"        data-tab="history"  onclick="switchTab('history')">📋 Signal History</button>
+    <button class="tab-btn"        data-tab="indices"  onclick="switchTab('indices')">📈 Indices</button>
+    <button class="tab-btn"        data-tab="detail"   onclick="switchTab('detail')" id="detail-tab-btn" style="display:none">🔍 Stock Detail</button>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div id="filter-bar">
+    <input id="search-input"  type="text"  placeholder="🔍 Search symbol / name…" oninput="filterTable()" />
+    <select id="signal-filter" onchange="filterTable()">
+      <option value="">All Signals</option>
+      <option value="BUY">BUY</option>
+      <option value="SELL">SELL</option>
+      <option value="HOLD">HOLD</option>
+    </select>
+    <select id="sector-filter" onchange="filterTable()">
+      <option value="">All Sectors</option>
+    </select>
+    <button id="refresh-btn" onclick="refreshAll()">⟳ Refresh Now</button>
+    <span class="count" id="row-count"></span>
+  </div>
+
+  <!-- CONTENT -->
+  <div id="content">
+
+    <!-- TAB: LIVE SIGNALS -->
+    <div id="tab-signals" class="tab-panel active">
+      <div id="signals-body"><div class="loading"><div class="spinner"></div><br>Loading live data…</div></div>
+    </div>
+
+    <!-- TAB: HISTORY -->
+    <div id="tab-history" class="tab-panel">
+      <div id="history-body"><div class="loading"><div class="spinner"></div><br>Loading history…</div></div>
+    </div>
+
+    <!-- TAB: INDICES -->
+    <div id="tab-indices" class="tab-panel">
+      <div id="indices-body"><div class="loading"><div class="spinner"></div><br>Loading indices…</div></div>
+    </div>
+
+    <!-- TAB: STOCK DETAIL -->
+    <div id="tab-detail" class="tab-panel" id="detail-panel">
+      <div id="detail-body"><div class="loading">Click a stock symbol to view detail.</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+//  CONFIG — Replace with your actual Railway URL after deploying
+// ─────────────────────────────────────────────────────────────────────────────
+const RAILWAY_URL = "https://YOUR-APP.railway.app"; // ← REPLACE THIS LINE
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let authToken  = localStorage.getItem("nifty_token") || "";
+let signalData = [];
+let currentTab = "signals";
+let sortCol    = "";
+let sortDir    = 1; // 1 = asc, -1 = desc
+let cdTimer    = null;
+let cdSec      = 60;
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const email    = document.getElementById("email-input").value.trim().toLowerCase();
+  const password = document.getElementById("password-input").value;
+  const btn      = document.getElementById("login-btn");
+  const errEl    = document.getElementById("login-error");
+  errEl.style.display = "none";
+  if (!email || !password) return;
+  btn.disabled = true;
+  btn.textContent = "Logging in…";
+  try {
+    const res = await apiFetch("/api/login", "POST", { email, password }, false);
+    authToken = res.token;
+    localStorage.setItem("nifty_token", authToken);
+    showApp();
+  } catch(e) {
+    errEl.style.display = "block";
+    btn.disabled = false;
+    btn.textContent = "LOGIN →";
+  }
+}
+document.getElementById("password-input").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+document.getElementById("email-input").addEventListener("keydown",    e => { if (e.key === "Enter") doLogin(); });
+
+function logout() {
+  authToken = "";
+  localStorage.removeItem("nifty_token");
+  clearInterval(cdTimer);
+  document.getElementById("app").style.display = "none";
+  document.getElementById("login-overlay").style.display = "flex";
+}
+
+// ─── API FETCH ────────────────────────────────────────────────────────────────
+async function apiFetch(path, method="GET", body=null, auth=true) {
+  const headers = { "Content-Type": "application/json" };
+  if (auth) headers["Authorization"] = "Bearer " + authToken;
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(RAILWAY_URL + path, opts);
+  if (res.status === 401) { logout(); throw new Error("Unauthorized"); }
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ─── APP INIT ─────────────────────────────────────────────────────────────────
+async function showApp() {
+  document.getElementById("login-overlay").style.display = "none";
+  document.getElementById("app").style.display = "flex";
+  await refreshAll();
+  startCountdown();
+}
+
+function startCountdown() {
+  cdSec = 60;
+  clearInterval(cdTimer);
+  cdTimer = setInterval(() => {
+    cdSec--;
+    document.getElementById("cd-sec").textContent = cdSec;
+    if (cdSec <= 0) { cdSec = 60; refreshAll(); }
+  }, 1000);
+}
+
+async function refreshAll() {
+  cdSec = 60;
+  document.getElementById("cd-sec").textContent = cdSec;
+  await Promise.allSettled([loadSignals(), loadHistory(), loadIndices()]);
+}
+
+// ─── TAB SWITCHING ────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("tab-" + tab).classList.add("active");
+  document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add("active");
+  const filterBar = document.getElementById("filter-bar");
+  filterBar.className = (tab === "signals") ? "" : "filter-bar-hidden";
+}
+
+// ─── LIVE SIGNALS ─────────────────────────────────────────────────────────────
+async function loadSignals() {
+  try {
+    const data = await apiFetch("/api/signals");
+    signalData = data.stocks || [];
+    updateHeader(data);
+    populateSectorFilter(signalData);
+    renderSignals(signalData);
+  } catch(e) {
+    document.getElementById("signals-body").innerHTML = `<div class="error-msg">⚠ Could not load signals: ${e.message}</div>`;
+  }
+}
+
+function updateHeader(data) {
+  const isOpen = data.is_market_open;
+  const badge  = document.getElementById("market-badge");
+  badge.textContent = isOpen ? "● MARKET OPEN" : "○ MARKET CLOSED";
+  badge.className   = isOpen ? "market-open" : "market-closed";
+  document.getElementById("last-update").textContent = "Updated: " + (data.last_update || "—");
+}
+
+function populateSectorFilter(stocks) {
+  const sel = document.getElementById("sector-filter");
+  const existing = new Set([...sel.options].map(o => o.value));
+  const sectors = [...new Set(stocks.map(s => s.sector))].sort();
+  sectors.forEach(sec => {
+    if (!existing.has(sec)) {
+      const opt = document.createElement("option");
+      opt.value = sec; opt.textContent = sec;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function filterTable() {
+  const search = document.getElementById("search-input").value.toLowerCase();
+  const sigF   = document.getElementById("signal-filter").value;
+  const secF   = document.getElementById("sector-filter").value;
+  const filtered = signalData.filter(s =>
+    (!search || s.symbol.toLowerCase().includes(search) || s.name.toLowerCase().includes(search)) &&
+    (!sigF   || s.signal === sigF) &&
+    (!secF   || s.sector === secF)
+  );
+  renderSignals(filtered, false);
+}
+
+function renderSignals(stocks, resetSort=true) {
+  const count = stocks.length;
+  document.getElementById("row-count").textContent = `${count} stocks`;
+  if (resetSort) { sortCol = ""; sortDir = 1; }
+  const rows = stocks.map(s => {
+    const pctClass = s.pct_change > 0 ? "pos" : s.pct_change < 0 ? "neg" : "neu";
+    const pctStr   = s.pct_change != null ? (s.pct_change > 0 ? "+" : "") + s.pct_change.toFixed(2) + "%" : "—";
+    const sigDate  = s.signal_date || "—";
+    const sigPrice = s.signal_price ? "₹" + s.signal_price.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+    const curPrice = s.current_price ? "₹" + s.current_price.toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+    return `<tr>
+      <td><span class="sym-link" onclick="loadDetail('${s.symbol}')">${s.symbol}</span></td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${s.name}</td>
+      <td style="color:var(--muted)">${s.sector}</td>
+      <td><span class="sig sig-${s.signal}">${s.signal}</span></td>
+      <td style="color:var(--muted)">${sigDate}</td>
+      <td>${sigPrice}</td>
+      <td><b>${curPrice}</b></td>
+      <td class="${pctClass}"><b>${pctStr}</b></td>
+      <td style="color:var(--muted);font-size:11px">${s.ema5 ? s.ema5.toFixed(2) : "—"}</td>
+      <td style="color:var(--muted);font-size:11px">${s.ema13 ? s.ema13.toFixed(2) : "—"}</td>
+      <td style="color:var(--muted);font-size:11px">${s.sma10 ? s.sma10.toFixed(2) : "—"}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("signals-body").innerHTML = `
+    <div class="tbl-wrap">
+      <table id="sig-table">
+        <thead>
+          <tr>
+            <th onclick="sortBy('symbol')">Symbol</th>
+            <th onclick="sortBy('name')">Company</th>
+            <th onclick="sortBy('sector')">Sector</th>
+            <th onclick="sortBy('signal')">Signal</th>
+            <th onclick="sortBy('signal_date')">Sig Date</th>
+            <th onclick="sortBy('signal_price')">Sig Price</th>
+            <th onclick="sortBy('current_price')">Live Price</th>
+            <th onclick="sortBy('pct_change')">% Chg</th>
+            <th>EMA5</th>
+            <th>EMA13</th>
+            <th>SMA10</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = 1; }
+  const sorted = [...signalData].sort((a, b) => {
+    let av = a[col], bv = b[col];
+    if (av == null) av = "";
+    if (bv == null) bv = "";
+    if (typeof av === "string") return av.localeCompare(bv) * sortDir;
+    return (av - bv) * sortDir;
+  });
+  renderSignals(sorted, false);
+  document.querySelectorAll("#sig-table th").forEach(th => {
+    th.classList.remove("sorted-asc","sorted-desc");
+  });
+}
+
+// ─── SIGNAL HISTORY ───────────────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const data = await apiFetch("/api/history");
+    const history = data.history || [];
+    if (!history.length) {
+      document.getElementById("history-body").innerHTML = `<div class="loading">No signals generated yet. Will appear once BUY/SELL crossovers are detected.</div>`;
+      return;
+    }
+    const rows = history.map(h => {
+      const pctClass = h.pct_change > 0 ? "pos" : h.pct_change < 0 ? "neg" : "neu";
+      const pctStr   = (h.pct_change > 0 ? "+" : "") + h.pct_change.toFixed(2) + "%";
+      return `<tr>
+        <td><span class="sym-link" onclick="loadDetail('${h.symbol}')">${h.symbol}</span></td>
+        <td>${h.name}</td>
+        <td style="color:var(--muted)">${h.sector}</td>
+        <td><span class="sig sig-${h.signal}">${h.signal}</span></td>
+        <td style="color:var(--muted)">${h.signal_date}</td>
+        <td>₹${h.signal_price.toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td>₹${h.current_price.toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td class="${pctClass}"><b>${pctStr}</b></td>
+        <td style="color:var(--muted);font-size:11px">${h.timestamp}</td>
+      </tr>`;
+    }).join("");
+    document.getElementById("history-body").innerHTML = `
+      <p class="section-title" style="margin-bottom:10px">All BUY / SELL signals since system started — ${history.length} records</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Symbol</th><th>Company</th><th>Sector</th><th>Signal</th>
+            <th>Date</th><th>Signal Price</th><th>Current Price</th><th>P&L %</th><th>Timestamp</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    document.getElementById("history-body").innerHTML = `<div class="error-msg">⚠ ${e.message}</div>`;
+  }
+}
+
+// ─── INDICES ──────────────────────────────────────────────────────────────────
+async function loadIndices() {
+  try {
+    const data = await apiFetch("/api/indices");
+    const indices = data.indices || [];
+    if (!indices.length) {
+      document.getElementById("indices-body").innerHTML = `<div class="loading">Loading index data…</div>`;
+      return;
+    }
+    const cards = indices.map(idx => {
+      const cls     = idx.pct_change >= 0 ? "pos" : "neg";
+      const arrow   = idx.pct_change >= 0 ? "▲" : "▼";
+      const chgStr  = (idx.pct_change >= 0 ? "+" : "") + idx.pct_change.toFixed(2) + "%";
+      const priceStr= idx.price ? idx.price.toLocaleString("en-IN", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—";
+      return `<div class="idx-card">
+        <div class="idx-name">${idx.name}</div>
+        <div class="idx-price ${cls}">${priceStr}</div>
+        <div class="idx-chg  ${cls}">${arrow} ${chgStr} vs prev close</div>
+      </div>`;
+    }).join("");
+    document.getElementById("indices-body").innerHTML = `
+      <p class="section-title" style="margin-bottom:14px">Nifty Indices — Live</p>
+      <div id="indices-grid">${cards}</div>`;
+  } catch(e) {
+    document.getElementById("indices-body").innerHTML = `<div class="error-msg">⚠ ${e.message}</div>`;
+  }
+}
+
+// ─── STOCK DETAIL ─────────────────────────────────────────────────────────────
+async function loadDetail(symbol) {
+  switchTab("detail");
+  document.getElementById("detail-tab-btn").style.display = "";
+  document.getElementById("detail-body").innerHTML = `<div class="loading"><div class="spinner"></div><br>Loading ${symbol}…</div>`;
+  try {
+    const data  = await apiFetch(`/api/stock/${symbol}`);
+    const info  = data.info || {};
+    const ohlcv = data.ohlcv || [];
+    const cp    = info.current_price ? "₹" + info.current_price.toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—";
+    const sp    = info.signal_price  ? "₹" + info.signal_price.toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—";
+    const pctCls= (info.pct_change||0) >= 0 ? "pos" : "neg";
+    const pctStr= info.pct_change != null ? ((info.pct_change>0?"+":"") + info.pct_change.toFixed(2) + "%") : "—";
+
+    const rows = [...ohlcv].reverse().map(r => {
+      const buySig  = r.buy_signal  ? `<span class="sig sig-BUY">BUY</span>`  : "";
+      const sellSig = r.sell_signal ? `<span class="sig sig-SELL">SELL</span>` : "";
+      const vol = r.volume ? r.volume.toLocaleString("en-IN") : "—";
+      const f2  = v => v != null ? v.toFixed(2) : "—";
+      return `<tr>
+        <td style="color:var(--muted)">${r.date}</td>
+        <td>${f2(r.open)}</td>
+        <td class="pos">${f2(r.high)}</td>
+        <td class="neg">${f2(r.low)}</td>
+        <td><b>${f2(r.close)}</b></td>
+        <td style="color:var(--muted);font-size:11px">${vol}</td>
+        <td style="color:var(--muted);font-size:11px">${f2(r.sma10)}</td>
+        <td style="color:var(--buy);font-size:11px">${f2(r.ema5)}</td>
+        <td style="color:var(--sell);font-size:11px">${f2(r.ema13)}</td>
+        <td style="color:var(--muted);font-size:11px">${r.volsma5 != null ? r.volsma5.toFixed(0) : "—"}</td>
+        <td>${buySig}${sellSig}</td>
+      </tr>`;
+    }).join("");
+
+    document.getElementById("detail-body").innerHTML = `
+      <div class="detail-header">
+        <button id="back-btn" onclick="switchTab('signals')">← Back</button>
+        <div>
+          <div class="d-sym">${symbol}</div>
+          <div class="d-name">${info.name || ""} &nbsp;·&nbsp; <span style="color:var(--muted)">${info.sector || ""}</span></div>
+        </div>
+        <div class="d-price ${pctCls}">${cp}</div>
+        <span class="sig sig-${info.signal||'HOLD'}">${info.signal||'HOLD'}</span>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="s-label">Signal</div><div class="s-value"><span class="sig sig-${info.signal||'HOLD'}">${info.signal||'HOLD'}</span></div></div>
+        <div class="stat-box"><div class="s-label">Signal Date</div><div class="s-value" style="font-size:13px">${info.signal_date||"—"}</div></div>
+        <div class="stat-box"><div class="s-label">Signal Price</div><div class="s-value">${sp}</div></div>
+        <div class="stat-box"><div class="s-label">P&L from Signal</div><div class="s-value ${pctCls}">${pctStr}</div></div>
+        <div class="stat-box"><div class="s-label">EMA5</div><div class="s-value" style="color:var(--buy)">${info.ema5 != null ? info.ema5.toFixed(2) : "—"}</div></div>
+        <div class="stat-box"><div class="s-label">EMA13</div><div class="s-value" style="color:var(--sell)">${info.ema13 != null ? info.ema13.toFixed(2) : "—"}</div></div>
+        <div class="stat-box"><div class="s-label">SMA10</div><div class="s-value">${info.sma10 != null ? info.sma10.toFixed(2) : "—"}</div></div>
+      </div>
+      <p class="section-title" style="margin-bottom:10px">OHLCV + Indicators — Last 60 Days (newest first)</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th>
+            <th>Volume</th><th>SMA10</th><th>EMA5</th><th>EMA13</th><th>VolSMA5</th><th>Signal</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    document.getElementById("detail-body").innerHTML = `<div class="error-msg">⚠ ${e.message}</div>`;
+  }
+}
+
+// ─── AUTO-LOGIN IF TOKEN EXISTS ───────────────────────────────────────────────
+(async () => {
+  if (authToken) {
+    try {
+      await apiFetch("/api/health");
+      showApp();
+    } catch(e) {
+      authToken = "";
+      localStorage.removeItem("nifty_token");
+    }
+  }
+})();
+</script>
+</body>
+</html>
