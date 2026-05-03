@@ -1,6 +1,7 @@
 """
 Nifty 200 Live Signal Backend
-Deploy on Railway.app  |  Start: uvicorn main:app --host 0.0.0.0 --port $PORT
+Deploy on Render.com  |  Start: uvicorn main:app --host 0.0.0.0 --port $PORT
+Signal Logic: EMA13 crosses EMA26 → BUY/SELL | SMA5 as trend filter
 """
 
 import os, time, logging, sqlite3
@@ -233,21 +234,21 @@ STOCK_MAP: Dict[str, dict] = {s["symbol"]: s for s in STOCKS}
 
 # ─── NIFTY INDICES ────────────────────────────────────────────────────────────
 INDICES_LIST = [
-    {"symbol": "^NSEI",    "name": "NIFTY 50"},
-    {"symbol": "^NSEBANK", "name": "NIFTY BANK"},
-    {"symbol": "^CNXIT",   "name": "NIFTY IT"},
+    {"symbol": "^NSEI",     "name": "NIFTY 50"},
+    {"symbol": "^NSEBANK",  "name": "NIFTY BANK"},
+    {"symbol": "^CNXIT",    "name": "NIFTY IT"},
     {"symbol": "^CNXPHARMA","name": "NIFTY PHARMA"},
-    {"symbol": "^CNXAUTO", "name": "NIFTY AUTO"},
+    {"symbol": "^CNXAUTO",  "name": "NIFTY AUTO"},
 ]
 
 # ─── IN-MEMORY STORE ─────────────────────────────────────────────────────────
 store: Dict[str, Any] = {
-    "last_update": "Not yet updated",
+    "last_update":    "Not yet updated",
     "is_market_open": False,
-    "initialized": False,
-    "stocks": {},       # symbol → stock entry dict
-    "ohlcv": {},        # symbol → pd.DataFrame with indicators
-    "indices": {},      # symbol → {name, price, pct_change, prev_close}
+    "initialized":    False,
+    "stocks":         {},
+    "ohlcv":          {},
+    "indices":        {},
 }
 
 # ─── DATABASE ─────────────────────────────────────────────────────────────────
@@ -255,12 +256,12 @@ def init_db():
     con = sqlite3.connect(DB_PATH)
     con.execute("""
         CREATE TABLE IF NOT EXISTS signal_history (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            symbol    TEXT NOT NULL,
-            signal    TEXT NOT NULL,
-            date      TEXT NOT NULL,
-            price     REAL NOT NULL,
-            ts        TEXT NOT NULL
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol  TEXT NOT NULL,
+            signal  TEXT NOT NULL,
+            date    TEXT NOT NULL,
+            price   REAL NOT NULL,
+            ts      TEXT NOT NULL
         )
     """)
     con.commit()
@@ -286,20 +287,20 @@ def get_history(limit: int = 500) -> List[dict]:
     con.close()
     result = []
     for r in rows:
-        sym = r[0]
+        sym   = r[0]
         entry = STOCK_MAP.get(sym, {})
         cur_price = store["stocks"].get(sym, {}).get("current_price", r[3])
         pct = round((cur_price - r[3]) / r[3] * 100, 2) if r[3] else 0
         result.append({
-            "symbol": sym,
-            "name": entry.get("name", sym),
-            "sector": entry.get("sector", ""),
-            "signal": r[1],
-            "signal_date": r[2],
+            "symbol":       sym,
+            "name":         entry.get("name", sym),
+            "sector":       entry.get("sector", ""),
+            "signal":       r[1],
+            "signal_date":  r[2],
             "signal_price": r[3],
-            "current_price": cur_price,
-            "pct_change": pct,
-            "timestamp": r[4],
+            "current_price":cur_price,
+            "pct_change":   pct,
+            "timestamp":    r[4],
         })
     return result
 
@@ -328,7 +329,7 @@ def get_nse_session() -> requests.Session:
         try:
             s.get("https://www.nseindia.com", timeout=15)
             time.sleep(0.5)
-            _nse_session = s
+            _nse_session    = s
             _nse_refresh_ts = time.time()
             log.info("NSE session refreshed")
         except Exception as e:
@@ -337,9 +338,8 @@ def get_nse_session() -> requests.Session:
     return _nse_session
 
 def fetch_nse_prices() -> Dict[str, float]:
-    """Fetch live prices for all Nifty 200 stocks from NSE."""
     session = get_nse_session()
-    url = "https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20200"
+    url  = "https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20200"
     resp = session.get(url, timeout=15)
     resp.raise_for_status()
     data = resp.json()
@@ -355,17 +355,16 @@ def fetch_nse_prices() -> Dict[str, float]:
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.sort_index(inplace=True)
-    df["SMA10"]   = df["Close"].rolling(10).mean().round(2)
-    df["EMA5"]    = df["Close"].ewm(span=5,  adjust=False).mean().round(2)
+    df["SMA5"]    = df["Close"].rolling(5).mean().round(2)
     df["EMA13"]   = df["Close"].ewm(span=13, adjust=False).mean().round(2)
+    df["EMA26"]   = df["Close"].ewm(span=26, adjust=False).mean().round(2)
     df["VolSMA5"] = df["Volume"].rolling(5).mean().round(0)
-    # Crossover signals
-    df["BuySignal"]  = (df["EMA5"] > df["EMA13"]) & (df["EMA5"].shift(1) <= df["EMA13"].shift(1))
-    df["SellSignal"] = (df["EMA5"] < df["EMA13"]) & (df["EMA5"].shift(1) >= df["EMA13"].shift(1))
+    # Signal: EMA13 crosses EMA26
+    df["BuySignal"]  = (df["EMA13"] > df["EMA26"]) & (df["EMA13"].shift(1) <= df["EMA26"].shift(1))
+    df["SellSignal"] = (df["EMA13"] < df["EMA26"]) & (df["EMA13"].shift(1) >= df["EMA26"].shift(1))
     return df
 
 def detect_current_signal(df: pd.DataFrame) -> dict:
-    """Walk history to find most recent crossover signal."""
     result = {"signal": "HOLD", "signal_date": None, "signal_price": None}
     for i in range(len(df) - 1, -1, -1):
         row = df.iloc[i]
@@ -381,12 +380,11 @@ def detect_current_signal(df: pd.DataFrame) -> dict:
             break
     return result
 
-# ─── HISTORICAL DATA LOAD (yfinance) ─────────────────────────────────────────
+# ─── HISTORICAL DATA LOAD ─────────────────────────────────────────────────────
 def load_historical_data():
-    """Download 60 days OHLCV from Yahoo Finance for all stocks and compute indicators."""
     log.info("Loading historical data from Yahoo Finance...")
-    symbols   = [s["symbol"] for s in STOCKS]
-    yf_syms   = [f"{sym}.NS" for sym in symbols]
+    symbols    = [s["symbol"] for s in STOCKS]
+    yf_syms    = [f"{sym}.NS" for sym in symbols]
     batch_size = 50
 
     for batch_start in range(0, len(yf_syms), batch_size):
@@ -396,7 +394,7 @@ def load_historical_data():
         try:
             raw = yf.download(
                 batch_yf,
-                period="60d",
+                period="90d",
                 interval="1d",
                 group_by="ticker",
                 auto_adjust=True,
@@ -414,24 +412,24 @@ def load_historical_data():
                     df = df.dropna(subset=["Close"])
                     if df.empty:
                         continue
-                    df = compute_indicators(df)
-                    store["ohlcv"][sym] = df
+                    df  = compute_indicators(df)
                     sig = detect_current_signal(df)
                     last = df.iloc[-1]
                     store["stocks"][sym] = {
-                        "symbol":       sym,
-                        "name":         STOCK_MAP[sym]["name"],
-                        "sector":       STOCK_MAP[sym]["sector"],
+                        "symbol":        sym,
+                        "name":          STOCK_MAP[sym]["name"],
+                        "sector":        STOCK_MAP[sym]["sector"],
                         "current_price": float(last["Close"]),
-                        "signal":       sig["signal"],
-                        "signal_date":  sig["signal_date"],
-                        "signal_price": sig["signal_price"],
-                        "pct_change":   0.0,
-                        "ema5":    round(float(last["EMA5"]),    2) if not pd.isna(last["EMA5"])    else None,
+                        "signal":        sig["signal"],
+                        "signal_date":   sig["signal_date"],
+                        "signal_price":  sig["signal_price"],
+                        "pct_change":    0.0,
+                        "sma5":    round(float(last["SMA5"]),    2) if not pd.isna(last["SMA5"])    else None,
                         "ema13":   round(float(last["EMA13"]),   2) if not pd.isna(last["EMA13"])   else None,
-                        "sma10":   round(float(last["SMA10"]),   2) if not pd.isna(last["SMA10"])   else None,
+                        "ema26":   round(float(last["EMA26"]),   2) if not pd.isna(last["EMA26"])   else None,
                         "volsma5": round(float(last["VolSMA5"]), 0) if not pd.isna(last["VolSMA5"]) else None,
                     }
+                    store["ohlcv"][sym] = df
                     if sig["signal_price"]:
                         cp = float(last["Close"])
                         sp = sig["signal_price"]
@@ -445,11 +443,10 @@ def load_historical_data():
     log.info(f"Historical load complete. {len(store['stocks'])} stocks ready.")
 
 def load_index_data():
-    """Load current index levels from Yahoo Finance."""
     try:
         for idx in INDICES_LIST:
             ticker = yf.Ticker(idx["symbol"])
-            hist = ticker.history(period="2d")
+            hist   = ticker.history(period="2d")
             if len(hist) >= 1:
                 price = float(hist["Close"].iloc[-1])
                 prev  = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else price
@@ -458,7 +455,7 @@ def load_index_data():
                     "symbol":     idx["symbol"],
                     "name":       idx["name"],
                     "price":      round(price, 2),
-                    "prev_close": round(prev, 2),
+                    "prev_close": round(prev,  2),
                     "pct_change": pct,
                 }
     except Exception as e:
@@ -478,7 +475,6 @@ def update_prices():
     if not store["is_market_open"]:
         return
 
-    # 1. Fetch live prices from NSE
     prices: Dict[str, float] = {}
     try:
         prices = fetch_nse_prices()
@@ -496,12 +492,10 @@ def update_prices():
 
         entry["current_price"] = ltp
 
-        # Recompute pct vs signal price
         sp = entry.get("signal_price")
         if sp:
             entry["pct_change"] = round((ltp - sp) / sp * 100, 2)
 
-        # Update today's candle in ohlcv cache
         df = store["ohlcv"].get(sym)
         if df is None or df.empty:
             continue
@@ -513,7 +507,6 @@ def update_prices():
             df.at[last_idx, "High"]  = max(df.at[last_idx, "High"], ltp)
             df.at[last_idx, "Low"]   = min(df.at[last_idx, "Low"],  ltp)
         else:
-            # New trading day row
             new_row = pd.DataFrame(
                 {"Open": [ltp], "High": [ltp], "Low": [ltp], "Close": [ltp], "Volume": [0]},
                 index=[pd.Timestamp(today)]
@@ -523,14 +516,12 @@ def update_prices():
         df = compute_indicators(df)
         store["ohlcv"][sym] = df
 
-        # Update indicators
         last = df.iloc[-1]
-        entry["ema5"]    = round(float(last["EMA5"]),    2) if not pd.isna(last["EMA5"])    else None
+        entry["sma5"]    = round(float(last["SMA5"]),    2) if not pd.isna(last["SMA5"])    else None
         entry["ema13"]   = round(float(last["EMA13"]),   2) if not pd.isna(last["EMA13"])   else None
-        entry["sma10"]   = round(float(last["SMA10"]),   2) if not pd.isna(last["SMA10"])   else None
+        entry["ema26"]   = round(float(last["EMA26"]),   2) if not pd.isna(last["EMA26"])   else None
         entry["volsma5"] = round(float(last["VolSMA5"]), 0) if not pd.isna(last["VolSMA5"]) else None
 
-        # Detect new signals
         if df["BuySignal"].iloc[-1] and entry.get("signal") != "BUY":
             entry["signal"]       = "BUY"
             entry["signal_date"]  = today
@@ -549,7 +540,6 @@ def update_prices():
     store["last_update"] = now_ist.strftime("%Y-%m-%d %H:%M:%S IST")
 
 def index_update_job():
-    """Refresh index data every 5 minutes during market hours."""
     if is_market_hours():
         load_index_data()
 
@@ -571,7 +561,7 @@ def verify_token(creds: HTTPAuthorizationCredentials = Depends(security)) -> str
         raise HTTPException(status_code=401, detail="Token expired or invalid")
 
 # ─── FASTAPI APP ──────────────────────────────────────────────────────────────
-app = FastAPI(title="Nifty200 Signals API", version="1.0")
+app = FastAPI(title="Nifty200 Signals API", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -581,32 +571,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Public endpoint
 @app.post("/api/login")
 def login(body: dict):
     email    = body.get("email", "").strip().lower()
     password = body.get("password", "")
     if USERS.get(email) != password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_token(email)
-    return {"token": token, "email": email}
+    return {"token": create_token(email), "email": email}
 
-# Health check (public)
 @app.get("/api/health")
 def health():
     return {
-        "status": "ok",
-        "initialized": store["initialized"],
-        "last_update": store["last_update"],
+        "status":         "ok",
+        "initialized":    store["initialized"],
+        "last_update":    store["last_update"],
         "is_market_open": store["is_market_open"],
-        "total_stocks": len(store["stocks"]),
+        "total_stocks":   len(store["stocks"]),
     }
 
-# Protected endpoints
 @app.get("/api/signals")
 def get_signals(email: str = Depends(verify_token)):
     stocks_list = list(store["stocks"].values())
-    # Sort: BUY first, then SELL, then HOLD
     order = {"BUY": 0, "SELL": 1, "HOLD": 2}
     stocks_list.sort(key=lambda x: order.get(x.get("signal", "HOLD"), 2))
     return {
@@ -629,23 +614,22 @@ def get_stock_detail(symbol: str, email: str = Depends(verify_token)):
     symbol = symbol.upper()
     if symbol not in store["ohlcv"]:
         raise HTTPException(status_code=404, detail="Symbol not found")
-    df = store["ohlcv"][symbol].copy()
-    df = df.tail(60)  # last 60 days
+    df   = store["ohlcv"][symbol].copy().tail(60)
     rows = []
     for dt, row in df.iterrows():
         def v(x):
             return None if pd.isna(x) else round(float(x), 2)
         rows.append({
-            "date":       dt.strftime("%Y-%m-%d"),
-            "open":       v(row["Open"]),
-            "high":       v(row["High"]),
-            "low":        v(row["Low"]),
-            "close":      v(row["Close"]),
-            "volume":     int(row["Volume"]) if not pd.isna(row["Volume"]) else 0,
-            "sma10":      v(row.get("SMA10")),
-            "ema5":       v(row.get("EMA5")),
-            "ema13":      v(row.get("EMA13")),
-            "volsma5":    v(row.get("VolSMA5")),
+            "date":        dt.strftime("%Y-%m-%d"),
+            "open":        v(row["Open"]),
+            "high":        v(row["High"]),
+            "low":         v(row["Low"]),
+            "close":       v(row["Close"]),
+            "volume":      int(row["Volume"]) if not pd.isna(row["Volume"]) else 0,
+            "sma5":        v(row.get("SMA5")),
+            "ema13":       v(row.get("EMA13")),
+            "ema26":       v(row.get("EMA26")),
+            "volsma5":     v(row.get("VolSMA5")),
             "buy_signal":  bool(row.get("BuySignal",  False)),
             "sell_signal": bool(row.get("SellSignal", False)),
         })
@@ -659,16 +643,12 @@ def startup():
     load_historical_data()
     load_index_data()
     store["is_market_open"] = is_market_hours()
-    store["initialized"] = True
+    store["initialized"]    = True
 
     scheduler = BackgroundScheduler(timezone=IST)
-    scheduler.add_job(update_prices,    "interval", minutes=1,  id="price_update")
-    scheduler.add_job(index_update_job, "interval", minutes=5,  id="index_update")
-    # Reload full historical data each morning at 9:00 AM IST
-    scheduler.add_job(
-        load_historical_data, "cron",
-        hour=9, minute=0, day_of_week="mon-fri", id="daily_reload"
-    )
+    scheduler.add_job(update_prices,        "interval", minutes=1, id="price_update")
+    scheduler.add_job(index_update_job,     "interval", minutes=5, id="index_update")
+    scheduler.add_job(load_historical_data, "cron", hour=9, minute=0, day_of_week="mon-fri", id="daily_reload")
     scheduler.start()
     log.info("Scheduler started. Server ready.")
 
