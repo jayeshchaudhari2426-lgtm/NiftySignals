@@ -711,26 +711,95 @@ function on(id, ev, fn) {
 // ════════════════════════════════════════════════════════
 // API HELPERS
 // ════════════════════════════════════════════════════════
-async function api(path, method, body) {
-  var h = {"Content-Type":"application/json"};
-  if (tok) h["Authorization"] = "Bearer " + tok;
+async function api(path, method = "GET", body = null) {
+  var h = {
+    "Content-Type": "application/json"
+  };
+
+  if (tok) {
+    h["Authorization"] = "Bearer " + tok;
+  }
+
   var r = await fetch(B + path, {
-    method: method || "GET",
+    method: method,
     headers: h,
-    body: body ? JSON.stringify(body) : undefined
+    body: body ? JSON.stringify(body) : null
   });
-  if (r.status === 401) { silentLogout(); throw new Error("401"); }
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
+
+  if (r.status === 401) {
+    silentLogout();
+    throw new Error("401");
+  }
+
+  if (!r.ok) {
+    throw new Error("HTTP " + r.status);
+  }
+
+  return await r.json();
 }
 
 async function apiGet(url) {
-  var h = {"Content-Type":"application/json"};
-  if (tok) h["Authorization"] = "Bearer " + tok;
-  var r = await fetch(url, {method:"GET", headers:h});
-  if (r.status === 401) { silentLogout(); throw new Error("401"); }
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
+  var h = {
+    "Content-Type": "application/json"
+  };
+
+  if (tok) {
+    h["Authorization"] = "Bearer " + tok;
+  }
+
+  var r = await fetch(url, {
+    method: "GET",
+    headers: h
+  });
+
+  if (r.status === 401) {
+    silentLogout();
+    throw new Error("401");
+  }
+
+  if (!r.ok) {
+    throw new Error("HTTP " + r.status);
+  }
+
+  return await r.json();
+}
+
+// ════════════════════════════════════════════════════════
+// LOGIN
+// ════════════════════════════════════════════════════════
+async function doLogin() {
+  var email = document.getElementById("lem").value.trim();
+  var password = document.getElementById("lpw").value.trim();
+
+  var err = document.getElementById("lerr");
+  var btn = document.getElementById("lbtn");
+
+  err.style.display = "none";
+
+  if (!email || !password) {
+    err.innerText = "Please enter email and password.";
+    err.style.display = "block";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerText = "Signing In...";
+
+  try {
+    // demo login
+    tok = "demo-token";
+    localStorage.setItem("ns_t", tok);
+
+    document.getElementById("login-page").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+
+  } catch (e) {
+    err.innerText = "Login failed.";
+    err.style.display = "block";
+  }
+
+  btn.disabled = false;
+  btn.innerText = "Sign In";
 }
 
 // ════════════════════════════════════════════════════════
