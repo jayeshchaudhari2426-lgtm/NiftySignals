@@ -684,17 +684,33 @@ var _pingInt = null;
 // LOGO HELPERS — needed by all render functions
 // ════════════════════════════════════════════════════════
 function LOGO(sym){ return "https://eodhd.com/img/logos/IN/"+sym+".png"; }
-function logoEl(sym, size, cls){
-  size = size || 32; cls = cls || "";
-  var colors = ["#00b386","#2563eb","#7c3aed","#f59e0b","#e5383b"];
-  var bg = colors[sym.charCodeAt(0) % colors.length];
-  var r  = Math.round(size * 0.28);
-  var fs = Math.round(size * 0.38);
-  return "<div class='"+cls+"' style='width:"+size+"px;height:"+size+"px;border-radius:"+r+"px;overflow:hidden;background:#f8fafc;display:flex;align-items:center;justify-content:center;border:1px solid #e5e7eb;flex-shrink:0'>"
-    +"<img src='"+LOGO(sym)+"' width='"+size+"' height='"+size+"' style='object-fit:contain' "
-    +"onerror="this.style.display='none';this.nextSibling.style.display='flex'" />"
-    +"<div style='display:none;width:"+size+"px;height:"+size+"px;border-radius:"+r+"px;background:"+bg+";align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:"+fs+"px'>"+sym[0]+"</div>"
-    +"</div>";
+function logoEl(sym, size, cls) {
+  size = size || 32;
+  cls = cls || "";
+
+  return `
+    <div class="${cls}" 
+      style="
+        width:${size}px;
+        height:${size}px;
+        border-radius:8px;
+        overflow:hidden;
+        background:#f8fafc;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border:1px solid #e5e7eb;
+        flex-shrink:0;
+      ">
+      <img 
+        src="https://eodhd.com/img/logos/IN/${sym}.png"
+        width="${size}"
+        height="${size}"
+        style="object-fit:contain"
+        onerror="this.style.display='none'"
+      />
+    </div>
+  `;
 }
 function fmt(v){ return v==null||v===undefined?"—":"₹"+Number(v).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function pctStr(v){ if(v==null)return "—"; return (v>=0?"+":"")+Number(v).toFixed(2)+"%"; }
