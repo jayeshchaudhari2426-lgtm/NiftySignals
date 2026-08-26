@@ -226,6 +226,40 @@ tr:hover td{background:var(--bg)}
   .idx-row{grid-template-columns:repeat(2,1fr)}
   .sig-grid{grid-template-columns:1fr}
 }
+
+/* Premium market scanner upgrade */
+.market-section-hd{gap:16px;align-items:flex-start;flex-wrap:wrap}
+.market-result-note{font-size:12px;color:var(--t2);margin-top:4px;font-weight:600}
+.market-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.market-controls input,.market-controls select{padding:8px 11px;border:1px solid var(--border);border-radius:10px;font-size:12px;background:var(--bg);color:var(--t1);font-family:inherit;outline:none}
+.market-controls input{min-width:190px}
+.market-controls input:focus,.market-controls select:focus{border-color:var(--g);box-shadow:0 0 0 3px rgba(0,179,134,.10)}
+.signal-filter-group{display:flex;gap:5px;padding:4px;background:var(--bg);border:1px solid var(--border);border-radius:12px}
+.signal-filter{border:0;background:transparent;color:var(--t2);padding:7px 9px;border-radius:8px;font:700 11px/1 inherit;cursor:pointer;transition:.2s}
+.signal-filter span{margin-left:4px;opacity:.75}
+.signal-filter:hover{background:var(--card);color:var(--t1)}
+.signal-filter.active{background:var(--card);color:var(--t1);box-shadow:0 2px 8px rgba(15,23,42,.10)}
+.signal-filter.buy-filter.active{color:var(--g)}
+.signal-filter.sell-filter.active{color:var(--r)}
+.signal-filter.hold-filter.active{color:var(--y)}
+#mkt-table tbody tr{transition:background .18s,transform .18s}
+#mkt-table tbody tr:hover{background:rgba(0,179,134,.045)}
+.tb-search-results{max-height:430px}
+.search-count{padding:10px 14px;font-size:11px;font-weight:700;color:var(--t2);border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:2}
+.search-empty{padding:18px 14px;color:var(--t2);font-size:12px;text-align:center}
+.stat-pill{border:1px solid var(--border);box-shadow:0 8px 24px rgba(15,23,42,.045)}
+.card{box-shadow:0 10px 30px rgba(15,23,42,.045)}
+.section-title{letter-spacing:-.02em}
+@media(max-width:900px){
+  .market-controls{justify-content:flex-start;width:100%}
+  .market-controls input{flex:1;min-width:160px}
+}
+@media(max-width:560px){
+  .signal-filter-group{width:100%;justify-content:space-between}
+  .signal-filter{flex:1;padding:7px 5px}
+  .market-controls input,.market-controls select{width:100%}
+}
+
 </style>
 </head>
 <body>
@@ -304,11 +338,20 @@ tr:hover td{background:var(--bg)}
     <div class="tab-panel active" id="panel-market">
       <div class="idx-row" id="idx-cards"></div>
       <div class="card"><div style="padding:16px 20px 12px">
-        <div class="section-hd">
-          <span class="section-title">All Stocks</span>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input id="mkt-q" placeholder="Filter…" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg);color:var(--t1);font-family:inherit;outline:none" oninput="filterMktTable()"/>
-            <select id="mkt-sec" onchange="filterMktTable()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg);color:var(--t1);font-family:inherit;outline:none">
+        <div class="section-hd market-section-hd">
+          <div>
+            <span class="section-title">Market Scanner</span>
+            <div class="market-result-note" id="mkt-count">Scanning all stocks…</div>
+          </div>
+          <div class="market-controls">
+            <div class="signal-filter-group">
+              <button class="signal-filter active" data-signal="ALL" onclick="setMarketSignal(this,'ALL')">All <span id="count-all">0</span></button>
+              <button class="signal-filter buy-filter" data-signal="BUY" onclick="setMarketSignal(this,'BUY')">BUY <span id="count-buy">0</span></button>
+              <button class="signal-filter sell-filter" data-signal="SELL" onclick="setMarketSignal(this,'SELL')">SELL <span id="count-sell">0</span></button>
+              <button class="signal-filter hold-filter" data-signal="HOLD" onclick="setMarketSignal(this,'HOLD')">HOLD <span id="count-hold">0</span></button>
+            </div>
+            <input id="mkt-q" placeholder="Search all stocks…" oninput="filterMktTable()"/>
+            <select id="mkt-sec" onchange="filterMktTable()">
               <option value="">All Sectors</option>
             </select>
           </div>
@@ -581,7 +624,8 @@ async function loadSignals() {
 function updateTabSub(d) {
   var buy  = stocks.filter(function(s){ return s.signal==="BUY"; }).length;
   var sell = stocks.filter(function(s){ return s.signal==="SELL"; }).length;
-  var sub  = buy+" BUY · "+sell+" SELL · "+stocks.length+" total";
+  var hold = stocks.filter(function(s){ return s.signal==="HOLD"; }).length;
+  var sub  = stocks.length+" Stocks Scanned · "+buy+" BUY · "+sell+" SELL · "+hold+" HOLD";
   if (d.is_market_open) sub += " · 🟢 Market Open";
   document.getElementById("tab-sub").textContent = sub;
 }
@@ -676,24 +720,54 @@ function pill(icon,label,val) {
 // ═══════════════════════════════════════════════════════
 // MARKET TABLE
 // ═══════════════════════════════════════════════════════
+var marketSignal = "ALL";
+
+function setMarketSignal(btn, signal) {
+  marketSignal = signal;
+  document.querySelectorAll(".signal-filter").forEach(function(b){ b.classList.remove("active"); });
+  btn.classList.add("active");
+  renderMktTable();
+}
+
 function filterMktTable() { renderMktTable(); }
 
 function renderMktTable() {
-  var q   = (document.getElementById("mkt-q").value||"").toLowerCase();
-  var sec = document.getElementById("mkt-sec").value;
+  var qEl = document.getElementById("mkt-q");
+  var secSel = document.getElementById("mkt-sec");
+  var q   = (qEl && qEl.value || "").toLowerCase().trim();
+  var sec = secSel ? secSel.value : "";
+
+  var counts = {
+    ALL: stocks.length,
+    BUY: stocks.filter(function(s){ return s.signal==="BUY"; }).length,
+    SELL: stocks.filter(function(s){ return s.signal==="SELL"; }).length,
+    HOLD: stocks.filter(function(s){ return s.signal==="HOLD"; }).length
+  };
+  Object.keys(counts).forEach(function(k){
+    var el = document.getElementById("count-"+k.toLowerCase());
+    if (el) el.textContent = counts[k];
+  });
+
   var rows = stocks.filter(function(s){
+    if (marketSignal !== "ALL" && s.signal !== marketSignal) return false;
     if (q && !s.symbol.toLowerCase().includes(q) && !(s.name||"").toLowerCase().includes(q)) return false;
     if (sec && s.sector !== sec) return false;
     return true;
   });
 
-  // Populate sectors dropdown
-  var secSel = document.getElementById("mkt-sec");
-  var curSec = secSel.value;
-  var sects  = [...new Set(stocks.map(function(s){ return s.sector; }).filter(Boolean))].sort();
-  secSel.innerHTML = "<option value=''>All Sectors</option>" + sects.map(function(s){
-    return "<option value='"+s+"'"+(s===curSec?" selected":"")+">"+s+"</option>";
-  }).join("");
+  // Populate sectors without losing the selected sector.
+  if (secSel) {
+    var curSec = secSel.value;
+    var sects  = [...new Set(stocks.map(function(s){ return s.sector; }).filter(Boolean))].sort();
+    secSel.innerHTML = "<option value=''>All Sectors</option>" + sects.map(function(s){
+      return "<option value='"+s+"'"+(s===curSec?" selected":"")+">"+s+"</option>";
+    }).join("");
+  }
+
+  var countLabel = document.getElementById("mkt-count");
+  if (countLabel) {
+    countLabel.textContent = "Showing " + rows.length + " of " + stocks.length + " stocks";
+  }
 
   document.getElementById("mkt-tbody").innerHTML = rows.map(function(s){
     var up   = (s.pct_change||0) >= 0;
@@ -709,7 +783,7 @@ function renderMktTable() {
       +"<td class='muted'>"+s.sector+"</td>"
       +"<td><button class='watch-btn icon-btn "+wSt+"' data-sym='"+s.symbol+"' onclick='toggleWatch(event,this.dataset.sym)'>⭐</button></td>"
       +"</tr>";
-  }).join("") || "<tr><td colspan='7' class='empty'>No stocks found</td></tr>";
+  }).join("") || "<tr><td colspan='7' class='empty'>No stocks match your search or filter</td></tr>";
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1354,17 +1428,25 @@ function doGlobalSearch() {
   var q   = (document.getElementById("global-search").value||"").toLowerCase().trim();
   var box = document.getElementById("search-results");
   if (!q) { box.classList.remove("open"); return; }
+
   var res = stocks.filter(function(s){
     return s.symbol.toLowerCase().includes(q) || (s.name||"").toLowerCase().includes(q);
-  }).slice(0,8);
-  if (!res.length) { box.classList.remove("open"); return; }
-  box.innerHTML = res.map(function(s){
-    return "<div class='sr-item' onclick=\"closeSearch();openModal('"+s.symbol+"')\">"
-      +logoEl(s.symbol,28)
-      +"<div><div class='sr-sym'>"+s.symbol+" <span class='sp "+sigClass(s.signal)+"' style='font-size:10px'>"+sigLabel(s.signal)+"</span></div>"
-      +"<div class='sr-name'>"+(s.name||"")+"</div></div>"
-      +"</div>";
-  }).join("");
+  });
+
+  if (!res.length) {
+    box.innerHTML = "<div class='search-empty'>No matching stock found in the loaded universe</div>";
+    box.classList.add("open");
+    return;
+  }
+
+  box.innerHTML = "<div class='search-count'>"+res.length+" match"+(res.length===1?"":"es")+" found</div>"
+    + res.map(function(s){
+      return "<div class='sr-item' onclick=\"closeSearch();openModal('"+s.symbol+"')\">"
+        +logoEl(s.symbol,28)
+        +"<div><div class='sr-sym'>"+s.symbol+" <span class='sp "+sigClass(s.signal)+"' style='font-size:10px'>"+sigLabel(s.signal)+"</span></div>"
+        +"<div class='sr-name'>"+(s.name||"")+"</div></div>"
+        +"</div>";
+    }).join("");
   box.classList.add("open");
 }
 
