@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: niftysignals
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: UPSTOX_ACCESS_TOKEN
+        sync: false          # set in the Render dashboard, never in git
+      - key: DATA_PROVIDER
+        value: upstox
+      - key: UPSTOX_FALLBACK
+        value: "1"
+      - key: VOL_MULTIPLIER
+        value: "1.5"
+      - key: LIVE_VOL_MODE
+        value: project

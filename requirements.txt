@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+requests
+pandas
+numpy
+yfinance
+apscheduler
+python-jose[cryptography]
+python-multipart
+pytz
+python-dotenv
