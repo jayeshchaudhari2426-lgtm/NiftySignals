@@ -381,10 +381,10 @@ def compute_indicators(df,live_projected_vol=None):
     df["SMA5"]=df["Close"].rolling(5).mean().round(2)
     df["EMA13"]=df["Close"].ewm(span=13,adjust=False).mean().round(2)
     df["EMA26"]=df["Close"].ewm(span=26,adjust=False).mean().round(2)
-    # Average of the PRIOR 20 sessions. Without shift(1) the current bar is inside
+    # Average of the PRIOR 5 sessions. Without shift(1) the current bar is inside
     # its own benchmark, which inflates the threshold exactly on the spike days the
     # strategy is meant to catch.
-    df["VolSMA20"]=df["Volume"].rolling(20).mean().shift(1).round(0)
+    df["VolSMA20"]=df["Volume"].rolling(5).mean().shift(1).round(0)
     df["RSI14"]=compute_rsi(df["Close"],14)
     df["MaxInd"]=df[["SMA5","EMA13","EMA26"]].max(axis=1)
     df["MinInd"]=df[["SMA5","EMA13","EMA26"]].min(axis=1)
